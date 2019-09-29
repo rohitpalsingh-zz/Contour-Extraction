@@ -4,11 +4,12 @@
 #include<fstream> 
 #include"contour.h"
 
-using namespace std ;
 
+using namespace std ;
+int pkg;
 /**********************************************Definition of Public members functions***********************************************/
 
-//Construtorinitialize the value of all variables to zero
+//Construtor initialize the value of all variables to zero
    
 	contour::contour()
 	{
@@ -22,16 +23,15 @@ using namespace std ;
  
 //Function to read Input file into "Input grid Matrix and all the associated variables"
  
-	void contour :: readfile ( char *  filename ) 
+	void contour :: readfile (char * s) 
 	  {
 	    bool space_flag = false ,decimal_flag= false , negative_flag = false;
 	    int row_count = 0 , col_count = 0 ,col =0;	
 	    int current_character, num = 1;
 	    float decimal_value = 0;
-	    FILE  * fp = fopen ( filename ,  "r" );
-   
+	    FILE  * fp = fopen ( s ,  "r" );
 // Reading a file character by character and extract a relevant information
-// Store the grid in an original_matrix
+// Store the grid in an inputgrid
 // Store all the variables
 
 	     if ( !fp )        
@@ -44,19 +44,15 @@ using namespace std ;
 	          {
 	          if(row_count==2&&col==0)
 	             {
-	               original_matrix = (cell**) malloc(NROWS*sizeof(cell*));  
-	                 for (int i = 0; i < NROWS; i++)  
-	                    original_matrix[i] = (cell*) malloc(NCOLS*sizeof(cell)); 
-		              for (int i = 0 ;i<NROWS ;i++ ) 
-		              	for (int j = 0 ;j<NCOLS ;j++ ) 
+	               inputgrid = (cell**) malloc((NROWS+2)*sizeof(cell*));  
+	                 for (int i = 0; i < NROWS+2; i++)  
+	                    inputgrid[i] = (cell*) malloc((NCOLS+2)*sizeof(cell)); 
+		         for (int i = 0 ;i<NROWS+2;i++ ) 
+		            for (int j = 0 ;j<NCOLS+2 ;j++ ) 
                 		  {  
-                		   original_matrix[i][j].intensity=0;
-                		   original_matrix[i][j].visited=false;
-                		   original_matrix[i][j].pairleft=false;
-                                   original_matrix[i][j].holeleft=false;
-                		   original_matrix[i][j].pairright=false;
-                                   original_matrix[i][j].holeright=false;
-                		  }
+                		   inputgrid[i][j].intensity=0;
+                		   inputgrid[i][j].polygonID=0;
+                		  }                         
                       }
 
          	  if ( row_count > 5 )
@@ -64,11 +60,13 @@ using namespace std ;
          	        if ( col%4 == 0 ) 
                 	 {  
                 	     if ( current_character == 49 ) 
-                	       original_matrix[row_count-6][col_count].intensity = 1 ;
+                	       inputgrid[row_count-5][col_count+1].intensity = 1 ;
                 	     if ( current_character == 50 ) 
-                	       original_matrix[row_count-6][col_count].intensity = 2 ;     
+                	       inputgrid[row_count-5][col_count+1].intensity = 2 ;   
+                             if ( current_character == 51 ) 
+                	       inputgrid[row_count-5][col_count+1].intensity = 3 ;     
                 	     if ( current_character == 48 ) 
-                	       original_matrix[row_count-6][col_count].intensity = 0 ;
+                	       inputgrid[row_count-5][col_count+1].intensity = 0 ;
                 	     col_count++ ;
 	                 } 
         	       col++;
@@ -157,13 +155,13 @@ using namespace std ;
 	                  }
 	                 if ( row_count == 3 ) 
 	                  {
-	                   YLLCORNER = YLLCORNER  +   ( decimal_value/num )  ;
+	                   YLLCORNER = YLLCORNER  +   ( decimal_value/num );
 	                   if ( negative_flag == true ) 
 	                    YLLCORNER =  - YLLCORNER ;
 	                  }   
 	                 if ( row_count == 4 ) 
 	                  {
-	                   CELLSIZE = CELLSIZE  +   ( decimal_value/num )  ;
+	                   CELLSIZE = CELLSIZE  +   ( decimal_value/num );
 	                  }
 	                 if ( row_count == 5 ) 
 	                  {
@@ -189,360 +187,577 @@ using namespace std ;
 	  fclose ( fp ) ;
 	}
 
-
-// Outputs the segment list of Regions and Holes
-	
-       void contour :: region_seg_list_output(char * s)
-	{
-         ofstream outfile;
-         int regionid=0,t,pkg;
-         outfile.open (s);  
-         
-         if (!outfile.is_open())
-         {
-           cout << "Error opening file";
-         }
-          for (int i =0 ;i<NROWS; i++ ) 
-           for (int j = 0 ;j<NCOLS; j++ ) 
-	     {
-	      if(original_matrix[i][j].visited==false)
-               { 
-                 get_outercycle(i,j,regionid,outfile,false);        // Private Function to list the outercyclecoordinates in counterclockwise order
-                 get_holecycles(i,j,outfile);                 // Private Function to list the holecycles(if any) inside the above outercycle
-                 regionid++;  
-               }
-             }
-
-        }
-
-
-
-/************************************************************Definition of Private Member Functions************************************************/
-
-
-// This function traverses the outercycle cells and write to file the co-ordinates of outercycle in counter-clockwise order.
-
-// Another role of this function is to set a pair flags( defined in documentation) and visited flags(defined in documentation).
-
-
-       void contour :: get_outercycle(int i, int j, int regionid,std::ofstream& outfile,bool ishole)
-            {
-                
-                int p,q,cdirection=2,pdirection=0,INTENSITYLEVEL=0,m,cont=0 ,c=0;
-                INTENSITYLEVEL=original_matrix[i][j].intensity;
-                
-                if(ishole)
-                 { 
-                  outfile<<"\n"<<"HOLE ID :: "<<regionid<<"\n";
-                  outfile<<"HOLE COORDINATES ::  { ("<<XLLCORNER+(j*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-i)*CELLSIZE)<<") ";      
-                 }
-                else
+void contour :: boundaryextraction()
+    {
+      int polygonID=1 , polygonID1 =0 ,polygonID2 = 0;
+      float x1 , x2 , y1 , y2;
+      bool merging_required; 
+      Polygonwithholes *PWH;
+      
+      for(int j=1;j<NCOLS+1;j++)
+       { 
+       for(int i=NROWS;i>0;i--)
+        {
+        if(inputgrid[i][j].intensity!=0)  // Stop at a cell that has some intensity value
+         {   
+ // Look weather anew polygon needs to be inserted.
+          if(inputgrid[i][j-1].intensity==inputgrid[i][j].intensity || inputgrid[i+1][j].intensity==inputgrid[i][j].intensity)
                  {
-                  outfile<<"\n"<<"REGION ID :: "<<regionid<<"\n";
-                  outfile<<"INTENSITYLEVEL :: "<<INTENSITYLEVEL<<"\n";
-                  outfile<<"REGION COORDINATES ::  { ("<<XLLCORNER+(j*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-i)*CELLSIZE)<<") ";   
-                 }  
-               p=i;
-               q=j;
-               pdirection=0; 
-               cdirection=2;
-            // do while loop.. loops around the outercycle when the loop is complete it terminates 
-               do   
-                {
-            // logic to set the flags while traversing a direction is different for all directions.
-            // Variable c and m whereever used is used to single out the first cell in that direction.
-                      if(cdirection==2)
-                        { m=p; 
-                          while(p<NROWS-1) 
-                              { 
-                               if (original_matrix[p+1][q].intensity!=INTENSITYLEVEL||(m!=p&&q>0&&original_matrix[p][q-1].intensity==INTENSITYLEVEL))
-                                   break;
-                                 else
-                                 {  
-// First If is for the first cell in this direction and else part is for the rest except last.
-                                  original_matrix[p][q].pairleft = true;                                                                          
-                                 }
-                               p++;
-                              }
-                            
-// This is for the last cell in this direction. 
-                         }
-                      else if(cdirection==3)
-                         { m=q;
-                            
-                            while( q>0)
-                              {
-                               if (original_matrix[p][q-1].intensity!=INTENSITYLEVEL||(m!=q&&p>0&&original_matrix[p-1][q].intensity==INTENSITYLEVEL))
-                                   break;
-                                 
-                                q--;  
-                              }
-                        } 
-                       else if(cdirection==1)
-                         { m=q;
-                            while(q<NCOLS-1)
-                              {
-                               if (original_matrix[p][q+1].intensity!=INTENSITYLEVEL||(m!=q&&p<NROWS-1&&original_matrix[p+1][q].intensity==INTENSITYLEVEL))
-                                   break;  
-                                 
-                               q++;
-                             }
-                         } 
-                       else if(cdirection==4)
-                         { m=p;
-                           c=0;
-                             while(p>0)
-                              {
-                          if (original_matrix[p-1][q].intensity!=INTENSITYLEVEL||(m!=p&&q<NCOLS-1&&original_matrix[p][q+1].intensity==INTENSITYLEVEL))
-                                   break; 
-                                else
-                                 { 
-// This is for the first cell in this direction and else is for the rest except last.
-                                   if(c==1)
-                                   original_matrix[p][q].pairright=true; 
-                                   c=1;
-                                 }  
-                                p--;
-                              }
-                              original_matrix[p][q].pairright=true; 
-                           } 
-          // Setting new direction based on previous direction and new surrounding cells
-                       pdirection=cdirection;
+ //polygon exists
+                   
 
-                       if(pdirection==2)
-                         {
-                            if(q!=0&&original_matrix[p][q-1].intensity==INTENSITYLEVEL)
-                            cdirection=3;
-                            else if(q!=NCOLS-1&&original_matrix[p][q+1].intensity==INTENSITYLEVEL)
-                            cdirection=1;
-                         }
-                       else if(pdirection==3)
-                          {
-                            if(p!=0&&original_matrix[p-1][q].intensity==INTENSITYLEVEL)
-                            cdirection=4;
-                            else if(p!=NROWS-1&&original_matrix[p+1][q].intensity==INTENSITYLEVEL)
-                            cdirection=2;
-                          }
-                       else if(pdirection==4)
-                         {
-                            if(q!=NCOLS-1&&original_matrix[p][q+1].intensity==INTENSITYLEVEL)
-                            cdirection=1;
-                            else if(q!=0&&original_matrix[p][q-1].intensity==INTENSITYLEVEL)
-                            cdirection=3;
-                          }
-                       else if(pdirection==1)
-                          {
-                            if(p!=NROWS-1&&original_matrix[p+1][q].intensity==INTENSITYLEVEL)
-                            cdirection=2;
-                            else if(p!=0&&original_matrix[p-1][q].intensity==INTENSITYLEVEL)
-                            cdirection=4;
-                          }
-             // This is the case when there is a U turn. Happens when we did't find any cell in the surroundings  .     
-                     if(pdirection==cdirection)
-                          {
-                           if(pdirection==1)
-                           {  outfile<<"("<<XLLCORNER+((q+1)*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p-1)*CELLSIZE)<<") ("<<XLLCORNER+((q+1)*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") ";
-                             cdirection=3;
-                           }
-                          else  if(pdirection==2)
-                           {
-                           outfile<<"("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p-1)*CELLSIZE)<<") ("<<XLLCORNER+((q+1)*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p-1)*CELLSIZE)<<") ";
-                             cdirection=4; 
-                           }
-                          else  if(pdirection==3)
-                           {
-                            if(!(p==i&&q==j))
-                           outfile<<"("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") ("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p-1)*CELLSIZE)<<") ";
-                             else
-                           outfile<<"("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") "; 
-                            cdirection=1; 
-                           }
-                          else  if(pdirection==4)
-                           {
-                           outfile<<"("<<XLLCORNER+((q+1)*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") ("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") ";
-                             cdirection=2; 
-                          }                
-                        }
-                       else
-                         {
-                     if((pdirection==1&&cdirection==4)||(pdirection==4&&cdirection==1))
-                          outfile<<"("<<XLLCORNER+((q+1)*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p-1)*CELLSIZE)<<") ";
-                     if((pdirection==2&&cdirection==1)||(pdirection==1&&cdirection==2)) 
-                          outfile<<"("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p-1)*CELLSIZE)<<") "; 
-                     if((pdirection==3&&cdirection==2)||(pdirection==2&&cdirection==3)) 
-                          outfile<<"("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") ";
-                     if((pdirection==4&&cdirection==3)||(pdirection==3&&cdirection==4)) 
-                          outfile<<"("<<XLLCORNER+((q+1)*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") ";
-                       }
-              // This condition is for a special inverted L like shapes where starting point is traversed more than two times without ending the loop.
-//////////////////////
-//     
-//     ||||||||
-//     ||              This type of shape
-//     || 
-//     ||
-//
-/////////////////////     
-                   if((pdirection==4||pdirection==2)&&cdirection==1&&p==i&q==j)
-                           cont=1;
-                   else
-                           cont=0;
-                   }  
-                while(!(p==i&&q==j&&cont==0));
-                 
-   // This is for wrap around.
-
-                if(cdirection==4)
-                  outfile<<"("<<XLLCORNER+((q+1)*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<") ("<<XLLCORNER+(q*CELLSIZE)<<" , "<<YLLCORNER+((NROWS-p)*CELLSIZE)<<")  }\n\n";
-                else
-                  outfile<<"  }\n\n";
-
-
-            }
-
-
-// This function loop around exactly the same way as the above function do. But it do some thing in addition. It make use of the pair flag( set in above function ) to scan horizontly the inside of the cycle at that vertical height to figure out the holes(if any) at that vertical level.
-// And it repeats this for every vertical level.  
-// Here c is used to avoid a special case.
-
-    void contour :: get_holecycles(int i, int j,std::ofstream& outfile)
-       {
-
-       int holeid=0,p,q,cdirection=2,pdirection=0,INTENSITYLEVEL=0,m,cont=0,x=0;
-                INTENSITYLEVEL=original_matrix[i][j].intensity;
-               p=i;
-               q=j;
-               pdirection=0; 
-               cdirection=2;
-                 do
-                {
-// When cdirection is 2 means we are going through vertical level downward and only during this direction we check the horizontal insides of outercycle at that vertical level 
-// 
-                      if(cdirection==2)   
-                        { m=p; 
-                            while(p<NROWS-1)
-                              {  
-                               if (original_matrix[p+1][q].intensity!=INTENSITYLEVEL||(m!=p&&q>0&&original_matrix[p][q-1].intensity==INTENSITYLEVEL))
-                                  break;
-                                 else
-                                 {      
-                                  if(original_matrix[p][q].pairleft==true&&original_matrix[p][q].pairright==false)
-                                     { x=q;
-                                        do 
-                                         {
-//   This condition is to skip the already identified hole regions. 
-                                              if(original_matrix[p][x].holeleft==true)
-                                                 { 
-                                                  do
-                                                    {
-                                                    x++;
-                                                    }    
-                                                  while(!(original_matrix[p][x].holeright==true&&original_matrix[p][x].holeleft==false));
-                                                 }
-                                              if(original_matrix[p][x].intensity!=INTENSITYLEVEL)
-                                                 {
-//  This is where we have identified an hole and we call a function to list its coordinates.
-                                                 get_outercycle(p,x,holeid,outfile,true);
-                                                 holeid++;
-                                                     while(!(original_matrix[p][x].holeright==true&&original_matrix[p][x].holeleft==false))
-                                                     {
-                                                      x++;
-                                                     } 
-                                                   
-                                                 }
-                                         if(original_matrix[p][x].pairright==false)
-                                            x++; 
-                                         original_matrix[p][x].visited = true;
-                                         }
-                                       while(original_matrix[p][x].pairright==false);
-                                     }
-                                 }
-                               p++;
-                              }                         
-                          } 
-                      else if(cdirection==3)
-                         { m=q;
-                               while( q>0)
-                              {
-                               if (original_matrix[p][q-1].intensity!=INTENSITYLEVEL||(m!=q&&p>0&&original_matrix[p-1][q].intensity==INTENSITYLEVEL))
-                                   break;
-                                q--;
-                             
-                              }
-                         
-                          } 
-                       else if(cdirection==1)
-                         { m=q;
-                             while(q<NCOLS-1)
-                              {
-                          if (original_matrix[p][q+1].intensity!=INTENSITYLEVEL||(m!=q&&p<NROWS-1&&original_matrix[p+1][q].intensity==INTENSITYLEVEL))
-                                   break;  
-                               q++;
-                               }
-                          } 
-                       else if(cdirection==4)
-                         { m=p;
-                              while(p>0)
-                              {
-                          if (original_matrix[p-1][q].intensity!=INTENSITYLEVEL||(m!=p&&q<NCOLS-1&&original_matrix[p][q+1].intensity==INTENSITYLEVEL))
-                                   break; 
-                               
-                                p--;
-                              }
-                           } 
-
-                       pdirection=cdirection;
-
-                       if(pdirection==2)
-                         {
-                            if(q!=0&&original_matrix[p][q-1].intensity==INTENSITYLEVEL)
-                            cdirection=3;
-                            else if(q!=NCOLS-1&&original_matrix[p][q+1].intensity==INTENSITYLEVEL)
-                            cdirection=1;
-                         }
-                       else if(pdirection==3)
-                          {
-                            if(p!=0&&original_matrix[p-1][q].intensity==INTENSITYLEVEL)
-                            cdirection=4;
-                            else if(p!=NROWS-1&&original_matrix[p+1][q].intensity==INTENSITYLEVEL)
-                            cdirection=2;
-                          }
-                       else if(pdirection==4)
-                         {
-                            if(q!=NCOLS-1&&original_matrix[p][q+1].intensity==INTENSITYLEVEL)
-                            cdirection=1;
-                            else if(q!=0&&original_matrix[p][q-1].intensity==INTENSITYLEVEL)
-                            cdirection=3;
-                          }
-                       else if(pdirection==1)
-                          {
-                            if(p!=NROWS-1&&original_matrix[p+1][q].intensity==INTENSITYLEVEL)
-                            cdirection=2;
-                            else if(p!=0&&original_matrix[p-1][q].intensity==INTENSITYLEVEL)
-                            cdirection=4;
-                          }
+// assign a polygonID to a cell
+                      polygonID1= inputgrid[i+1][j].polygonID;
+                      polygonID2 = inputgrid[i][j-1].polygonID;
+                      merging_required =  assignpolygonID(i,j, polygonID);
                     
-                     if(pdirection==cdirection)
-                          {
-                           if(pdirection==1)
-                            cdirection=3;
-                           else  if(pdirection==2)
-                            cdirection=4; 
-                           else  if(pdirection==3)
-                            cdirection=1; 
-                           else  if(pdirection==4)
-                            cdirection=2; 
-                           }
-                      
-                 
-                   if((pdirection==4||pdirection==2)&&cdirection==1&&p==i&&q==j)
-                      cont=1;
-                    else
-                      cont=0;
-                    
-                 }  
-                while(!(p==i&&q==j&&cont==0));
+//see if merging is required
+                      if(merging_required == true)
+                      { 
+//merge two PWH nodes
+                       mergeanddelete(polygonID1,polygonID2, inputgrid[i][j].intensity);
+                      }
+                       
+                    if(inputgrid[i][j].intensity==1)
+                     PWH = list.list->Intensity1List->first;
+                    if(inputgrid[i][j].intensity==2)
+                     PWH = list.list->Intensity2List->first;
+                    if(inputgrid[i][j].intensity==3)
+                     PWH = list.list->Intensity3List->first;
               
-       }
+                   while(PWH->polygonID!=inputgrid[i][j].polygonID)
+                     PWH = PWH->next;
+//Move to a PWH node that has same polygonID
+                     
+                    if(inputgrid[i+1][j].intensity!=inputgrid[i][j].intensity)
+                     {
+//add segment to PWH
+//lower segment of cell
+                         x1 = XLLCORNER+((j-1)*CELLSIZE);
+                         y1 = YLLCORNER+((NROWS-i)*CELLSIZE);
+                         x2 = XLLCORNER+((j)*CELLSIZE); 
+                         y2 = YLLCORNER+((NROWS-i)*CELLSIZE);
+                         add_segment(&PWH , x1, y1, x2, y2);  
+                           
+                     }     
+     
 
-//Thats All ..Thank You For Viewing
+                    if(inputgrid[i][j-1].intensity!=inputgrid[i][j].intensity)
+                     {
+//add segment to PWH
+//Left segment of cell
+                         x1 = XLLCORNER+((j-1)*CELLSIZE);
+                         y1 = YLLCORNER+((NROWS-i)*CELLSIZE);
+                         x2 = XLLCORNER+((j-1)*CELLSIZE); 
+                         y2 = YLLCORNER+((NROWS-i+1)*CELLSIZE);
+                         add_segment(&PWH , x1, y1 , x2 , y2);
+                      }
+                        
+                   if(inputgrid[i-1][j].intensity!=inputgrid[i][j].intensity)
+                     {
+//add segment to PWH
+//upper segment of cell
+                         x1 = XLLCORNER+((j-1)*CELLSIZE);
+                         y1 = YLLCORNER+((NROWS-i+1)*CELLSIZE);
+                         x2 = XLLCORNER+((j)*CELLSIZE); 
+                         y2 = YLLCORNER+((NROWS-i+1)*CELLSIZE);
+                         add_segment(&PWH , x1, y1 , x2 , y2);
+                      }
+                   if(inputgrid[i][j+1].intensity!=inputgrid[i][j].intensity)
+                     {
+//add segment to PWH 
+//Right segment of cell
+                         x1 = XLLCORNER+((j)*CELLSIZE);
+                         y1 = YLLCORNER+((NROWS-i)*CELLSIZE);
+                         x2 = XLLCORNER+((j)*CELLSIZE); 
+                         y2 = YLLCORNER+((NROWS-i+1)*CELLSIZE);
+                         add_segment(&PWH , x1, y1 , x2 , y2);
+                     }     
+                 
+              }
+              else
+              {   
+// create new polygonwithholenode of intensity of the cell
+               
+                  list.Insert(polygonID ,inputgrid[i][j].intensity);
+                  if(inputgrid[i][j].intensity==1)
+                  PWH = list.list->Intensity1List->last;
+                  if(inputgrid[i][j].intensity==2)
+                  PWH = list.list->Intensity2List->last;
+                  if(inputgrid[i][j].intensity==3)
+                  PWH = list.list->Intensity3List->last;
+// lower
+                  x1 = XLLCORNER+((j-1)*CELLSIZE);
+                  y1 = YLLCORNER+((NROWS-i)*CELLSIZE);
+                  x2 = XLLCORNER+((j)*CELLSIZE);
+                  y2 = YLLCORNER+((NROWS-i)*CELLSIZE); 
+                  list.Insertbegin(x1,y1,x2,y2,&PWH->outercycle);
+// Left
+                  x1 = XLLCORNER+((j-1)*CELLSIZE);
+                  y1 = YLLCORNER+((NROWS-i+1)*CELLSIZE);
+                  x2 = XLLCORNER+((j-1)*CELLSIZE);
+                  y2 = YLLCORNER+((NROWS-i)*CELLSIZE);   
+                  list.Insertbegin(x1,y1,x2,y2,&PWH->outercycle);
+// upper               
+                 if(inputgrid[i-1][j].intensity!=inputgrid[i][j].intensity)
+                    {
+                      x1 = XLLCORNER+(j*CELLSIZE);
+                      y1 = YLLCORNER+((NROWS-i+1)*CELLSIZE);
+                      x2 = XLLCORNER+((j-1)*CELLSIZE);
+                      y2 = YLLCORNER+((NROWS-i+1)*CELLSIZE); 
+                      list.Insertbegin(x1,y1,x2,y2,&PWH->outercycle);
+                    }
+// Right
+                  if(inputgrid[i][j+1].intensity!=inputgrid[i][j].intensity)
+                    {
+                      x1 = XLLCORNER+(j*CELLSIZE);
+                      y1 = YLLCORNER+((NROWS-i)*CELLSIZE);
+                      x2 = XLLCORNER+(j*CELLSIZE);
+                      y2 = YLLCORNER+((NROWS-i+1)*CELLSIZE); 
+                      list.Insertend(x1,y1,x2,y2,&PWH->outercycle);
+                       
+                    }
+                  inputgrid[i][j].polygonID = polygonID; 
+                  polygonID++;
+              }
+            }
+           
+         }
+       }
+     }
+        
+bool contour :: assignpolygonID(int a, int b , int polygonID)
+{int i=0 , removedID =0;
+  if(inputgrid[a][b].intensity==inputgrid[a][b-1].intensity && inputgrid[a][b].intensity==inputgrid[a+1][b].intensity)
+    {
+      if(inputgrid[a+1][b].polygonID==inputgrid[a][b-1].polygonID)
+        {
+          inputgrid[a][b].polygonID = inputgrid[a+1][b].polygonID;
+          return false;
+        } 
+      else
+        {
+//  Merging required 
+          if(inputgrid[a+1][b].polygonID<inputgrid[a][b-1].polygonID)
+            {
+             inputgrid[a][b].polygonID = inputgrid[a+1][b].polygonID;
+             removedID = inputgrid[a][b-1].polygonID;
+            }
+          else
+            {
+             inputgrid[a][b].polygonID = inputgrid[a][b-1].polygonID;
+             removedID = inputgrid[a+1][b].polygonID;
+
+//Make changes to grid Polygonids by removing the irrelevent polygonID
+            }
+          for(i=a-1;i>0;i--)
+            if(inputgrid[i][b-1].polygonID==removedID)
+               inputgrid[i][b-1].polygonID = inputgrid[a][b].polygonID;
+          
+          for(i=NROWS+1;i>a;i--)
+            if(inputgrid[i][b].polygonID==removedID)
+               inputgrid[i][b].polygonID = inputgrid[a][b].polygonID;
+           
+
+          return true;
+        }
+    }
+  else if(inputgrid[a][b].intensity==inputgrid[a][b-1].intensity)
+    { 
+      inputgrid[a][b].polygonID = inputgrid[a][b-1].polygonID;
+      return false;
+    }
+  else if(inputgrid[a][b].intensity==inputgrid[a+1][b].intensity)
+    {
+      inputgrid[a][b].polygonID = inputgrid[a+1][b].polygonID;
+      return false;
+    }
+   
+}
+
+// try to attach segment to outer cycle and all the holecycles of a node
+// if can be connected to two cycles then we merge those cycles.
+
+void contour :: add_segment(Polygonwithholes **PWH , float x1 , float y1 , float x2 , float y2)
+{
+  Holeheader *HH , *POCH1, *OCHH1 , *OCHH2 , *POCH2 , *PHH;
+  Outercycleheader *OCH , *OCH1 , *OCH2;
+  int addedH =0 , w1 , w2 , y = 0;
+  bool addedtooutercycle = false , added = false;
+ 
+   if((y=checkandaddseg(&((*PWH)->outercycle), x1 , y1 , x2 , y2))!=0)
+   {
+    w1 = y;
+    
+    OCH1 = (*PWH)->outercycle;
+    addedtooutercycle = true;
+    added = true;
+//added to outer cycle
+   }
+  HH = (*PWH)->holecycles;
+  PHH = NULL;
+  while(HH!=NULL)
+   {
+    OCH = HH->holecycle;
+    if((y=checkandaddseg(&OCH, x1 , y1 , x2 , y2))!=0)
+     { 
+//added to hole cycle
+       addedH++;
+       added=true;
+
+       if(addedtooutercycle == true || addedH==2)
+         {
+          w2 = y;
+          POCH2=PHH;
+          OCH2 = OCH;
+          OCHH2 = HH;
+          if((OCH1->start->x1!=OCH2->start->x1 && OCH1->start->x1 < OCH2->start->x1)||(OCH1->start->x1==OCH2->start->x1 && OCH1->start->y1 < OCH2->start->y1) )
+            {
+//OCH1 before OCH2 in lexicographical
+
+            if((w1 == 1 || w1 == 2) && (w2 == 1 || w2 == 2)) // If lower ends of both needs to be merged
+             {
+              list.Invertcycle(&OCH2);
+              list.Mergecycles(&OCH1 ,&OCH2 , 0);
+              list.DeleteH(POCH2 ,OCHH2);
+              if(POCH2==NULL)
+                (*PWH)->holecycles = NULL;
+             }
+            else if((w1 == 3 || w1 == 4) && (w2 == 3 || w2 == 4))  // if upper end of both needs to be merged
+             {
+              list.Invertcycle(&OCH2);
+              list.Mergecycles(&OCH1 ,&OCH2 , 1);
+              list.DeleteH(POCH2 , OCHH2);
+               if(POCH2==NULL)
+                (*PWH)->holecycles = NULL;
+           
+             }
+            else if((w1 == 3 || w1 == 4) && (w2 == 1 || w2 == 2)) // if upper of first and lower of second needs to be merged
+             {
+              list.Mergecycles(&OCH1 ,&OCH2 , 2);
+              list.DeleteH(POCH2 , OCHH2);
+              if(POCH2==NULL)
+               (*PWH)->holecycles = NULL;
+             }
+            else if((w1 == 1 || w1 == 2) && (w2 == 3 || w2 == 4)) // if lower of first and upper of second needs to be merged
+             {  
+              list.Mergecycles(&OCH1 ,&OCH2 , 3);
+              list.DeleteH(POCH2 ,OCHH2);
+              if(POCH2==NULL)
+                (*PWH)->holecycles = NULL;
+              
+             }
+             
+            }
+          else
+            {
+// OCH2 before in lexicographical order
+
+             if((w1 == 1 || w1 == 2) && (w2 == 1 || w2 == 2)) // If lower ends of both needs to be merged
+             {
+              list.Invertcycle(&OCH1);
+              list.Mergecycles(&OCH2 ,&OCH1 , 0);
+              list.DeleteH(POCH1 , OCHH1);
+               if(POCH1==NULL)
+                (*PWH)->holecycles = NULL;
+             }
+             else  if((w1 == 3 || w1 == 4)  && (w2 == 3 || w2 == 4)) // if upper end of both needs to be merged
+             {
+              list.Invertcycle(&OCH1);
+              list.Mergecycles(&OCH2 ,&OCH1 , 1);
+              list.DeleteH(POCH1 , OCHH1);
+              if(POCH1==NULL)
+                (*PWH)->holecycles = NULL; 
+             }
+             else if((w1 == 3 || w1 == 4) && (w2 == 1 || w2 == 2)) // if upper of first and lower of second needs to be merged
+             {
+              list.Mergecycles(&OCH2 ,&OCH1 , 2);
+              list.DeleteH(POCH1 , OCHH1);
+               if(POCH2==NULL)
+                (*PWH)->holecycles = NULL;
+             }
+             else if((w1 == 1 || w1 == 2) && (w2 == 3 || w2 == 4)) // if lower of first and upper of second needs to be merged
+             { 
+              list.Mergecycles(&OCH2 ,&OCH1 , 3);
+              list.DeleteH(POCH1 ,OCHH1);
+              if(POCH2==NULL)
+                (*PWH)->holecycles = NULL;
+
+             }
+            }
+            break;
+         }
+        else
+         {
+          OCHH1=HH;
+          POCH1=PHH;
+          w1 = y; 
+          OCH1 = OCH;
+         }
+  
+     }
+    PHH = HH;
+    HH = HH->next;
+   } 
+// if it can not be attached to any of the existing outer cycle + hole cycles  than inser a new hole cycle
+  if(added!=true)
+   {
+     list.Insertholeheader(PWH);
+     HH = (*PWH)->holecycles;
+     while(HH->next!=NULL)
+     HH = HH->next; 
+     list.Insertend( x2 , y2 ,x1 ,y1  ,&(HH->holecycle));
+   }
+  
+}
+
+// this function will try to attach segment to a outercycle to its both ends.
+// will return 1 and 2 if the segment is attached to the lower end. 1 and 2 is segment algnment. if segment is a horizontal segment than 1 means its is connected from left to right if 2 then from right to left. if segment is vertical segment then 1 means its connected from down to up and 2 means up to down.
+// will return 3 and 4 if the segment is attached to the upper end. Similarly with 3 and 4.
+int contour :: checkandaddseg(Outercycleheader **OCH , float x1 , float y1 , float x2 , float y2)
+{ 
+  if(!(((*OCH)->last->x2==x1&&(*OCH)->last->y2==y1&&(*OCH)->first->x1==x2&&(*OCH)->first->y1==y2) ||((*OCH)->first->x1==x1&&(*OCH)->first->y1==y1&&(*OCH)->last->x2==x2&&(*OCH)->last->y2==y2)))
+   {
+  
+   if((*OCH)->last->x2==x1&&(*OCH)->last->y2==y1)
+     {
+      if(((*OCH)->last->x1==x2|| (*OCH)->last->y1==y2))
+      list.Updateend(x2,y2,OCH);
+      else
+      list.Insertend(x1,y1,x2,y2,OCH);
+
+      return 1;
+     }
+    else if((*OCH)->last->x2==x2&&(*OCH)->last->y2==y2)
+    {
+     if(((*OCH)->last->x1==x1|| (*OCH)->last->y1==y1))
+      list.Updateend(x1,y1,OCH);
+      else
+      list.Insertend(x2,y2,x1,y1,OCH);      
+
+      return 2;
+    }
+    else if((*OCH)->first->x1==x1&&(*OCH)->first->y1==y1)
+      { 
+       if(((*OCH)->first->x2==x2|| (*OCH)->first->y2==y2))
+      list.Updatebegin(x2,y2,OCH);
+      else
+      list.Insertbegin(x2,y2,x1,y1,OCH);
+     
+       return 3;
+      }
+    else if((*OCH)->first->x1==x2&&(*OCH)->first->y1==y2)
+      { 
+       if(((*OCH)->first->x2==x1|| (*OCH)->first->y2==y1))
+      list.Updatebegin(x1,y1,OCH);
+      else
+      list.Insertbegin(x1,y1,x2,y2,OCH);
+         
+       return 4;
+      } 
+    }
+  else
+   {
+// when the cycle ends means the segment attaches to bot ends
+      if((*OCH)->last->x1==x2)
+        {  list.Updateend(x2,y2,OCH);
+        }
+      else
+        { 
+           list.Insertbegin(x1,y1,x2,y2,OCH);
+        }
+     return 5;
+   }
+  
+return 0;
+}
+// merge to PWH hole nodes with polygonID1 and polygonID2
+void contour :: mergeanddelete(int polygonID1 , int polygonID2 , int intensity)
+{
+ Polygonwithholes *PWH1 , *PPWH1 , *PWH2 , *PPWH2  , *PWH , *PPWH;
+ Holeheader *HH;
+ Outercycleheader *OCH;
+ List *list1;
+  if(intensity==1)
+   {
+   PWH = list.list->Intensity1List->first;
+   list1= list.list->Intensity1List;
+   }
+  if(intensity==2)
+   {
+    PWH = list.list->Intensity2List->first;
+   list1= list.list->Intensity2List;
+   }
+  if(intensity==3)
+   {
+   PWH = list.list->Intensity3List->first;
+   list1= list.list->Intensity3List;
+   }
+ PPWH1=NULL;
+ PPWH2=NULL;
+ PPWH = NULL;
+ while(PWH!=NULL)
+  {
+   if(polygonID1 ==  PWH->polygonID) 
+          {
+             PWH1=PWH;
+             PPWH1 = PPWH;
+          }
+       
+   if(polygonID2 == PWH->polygonID) 
+          {
+             PWH2=PWH;
+             PPWH2 = PPWH;
+          }
+       
+   PPWH = PWH;
+   PWH = PWH->next;
+  }
+
+// see which one exist first in lexicographical order and attach to its outer cycle or hole cycles the outer cycle of other and merge the hole cycle list.
+
+ if((PWH1->outercycle->start->x1!=PWH2->outercycle->start->x1 && PWH1->outercycle->start->x1 < PWH2->outercycle->start->x1)||(PWH1->outercycle->start->x1==PWH2->outercycle->start->x1 && PWH1->outercycle->start->y1 < PWH2->outercycle->start->y1))
+  {    if(PWH1->outercycle->last->x2==PWH2->outercycle->first->x1 && PWH1->outercycle->last->y2==PWH2->outercycle->first->y1)
+        { 
+         list.Mergepolygonwithholes(&PWH1 ,&PWH2 , 0);
+         list.DeletePWH(PPWH2 , PWH2);
+        }
+       else if(PWH1->outercycle->first->x1==PWH2->outercycle->last->x2 && PWH1->outercycle->first->y1==PWH2->outercycle->last->y2)
+        {   
+         list.Mergepolygonwithholes(&PWH1 ,&PWH2 , 1);
+         list.DeletePWH(PPWH2 , PWH2);
+        }
+       else
+        {
+         HH = PWH1->holecycles;
+         while(HH!=NULL)
+          {
+             OCH = HH->holecycle;
+             if(OCH->first->x1==PWH2->outercycle->first->x1 && OCH->first->y1==PWH2->outercycle->first->y1)
+               {
+                 list.Invertcycle(&(PWH2->outercycle));
+
+                PWH2->outercycle->last->next=OCH->first;
+                OCH->last->next= PWH2->outercycle->first;
+                OCH->first =  PWH2->outercycle->first;    
+
+                 list.Mergepolygonwithholes(&PWH1 ,&PWH2 , 3);
+                 list.DeletePWH(PPWH2 , PWH2);
+                 break;
+               }
+             HH = HH->next;
+          }
+        }
+     if(list1->last == PWH2)
+       list1->last=PPWH2;
+  }
+  else
+  {     if(PWH2->outercycle->last->x2==PWH1->outercycle->first->x1 && PWH2->outercycle->last->y2==PWH1->outercycle->first->y1)
+        {   
+         list.Mergepolygonwithholes(&PWH2 ,&PWH1 , 0);
+         list.DeletePWH(PPWH1 , PWH1);
+        }
+      else if(PWH2->outercycle->first->x1==PWH1->outercycle->last->x2 && PWH2->outercycle->first->y1==PWH1->outercycle->last->y2)
+        {  
+         list.Mergepolygonwithholes(&PWH2 ,&PWH1 , 1);
+         list.DeletePWH(PPWH1 , PWH1);
+        }
+      else 
+        {
+           HH = PWH2->holecycles;
+         while(HH!=NULL)
+          {
+              OCH = HH->holecycle;
+            
+             if(OCH->first->x1==PWH1->outercycle->first->x1 && OCH->first->y1==PWH1->outercycle->first->y1)
+               { 
+                list.Invertcycle(&(PWH1->outercycle));
+                PWH1->outercycle->last->next=OCH->first;
+                OCH->last->next= PWH1->outercycle->first;
+                OCH->first =  PWH1->outercycle->first;  
+                list.Mergepolygonwithholes(&PWH2 ,&PWH1 , 3);
+                list.DeletePWH(PPWH1 , PWH1);
+                break;
+               }
+            HH = HH->next;
+          }
+        } 
+     if(list1->last == PWH1)
+       list1->last=PPWH1;
+    
+  }
+ 
+}     
+
+
+
+void contour :: writetofile(char *s)
+           {
+           ofstream outfile;
+            outfile.open (s); 
+            int polygonID =0 , holeID=0;
+            Node *N;
+            Polygonwithholes *PWH;
+            Holeheader *HH;
+           
+            for(int i=1;i<4;i++)
+            {
+            if(i==1)
+            PWH=list.list->Intensity1List->first;
+            if(i==2)
+            PWH=list.list->Intensity2List->first;
+            if(i==3)
+            PWH=list.list->Intensity3List->first;
+            polygonID = 0;
+
+            if(PWH!=NULL)
+            { 
+             do
+             {
+             outfile<<"REGIONID :: "<<polygonID<<"\nINTENSITYLEVEL :: "<<"\nREGION COORDINATES :: {";
+             polygonID++;
+             holeID=0;
+             N=PWH->outercycle->start;
+             if(N!=NULL)
+              {
+             do {
+                 outfile<<"("<<N->x1<<","<<N->y1<<"->"<<N->x2<<","<<N->y2<<") ";
+                 N = N->next;
+                }
+             while (N != PWH->outercycle->start);
+              }
+
+             outfile<<"}";
+             HH = PWH->holecycles;
+           
+             if(HH!=NULL)
+             {
+              do
+               {
+                outfile<<"\n\nHoleID :: "<<holeID;
+                outfile<<"\nHOLE COORDINATES :: {";
+                holeID++;
+                N=HH->holecycle->start;
+                if(N!=NULL)
+                 {
+                do {
+                    outfile<<"("<<N->x1<<","<<N->y1<<"->"<<N->x2<<","<<N->y2<<") ";
+                    N = N->next;
+                   } 
+                while (N != HH->holecycle->start);
+                 }
+                outfile<<"}" ;
+                HH = HH->next;
+               }
+              while(HH!=NULL);
+             }
+             outfile<<"\n\n\t\t\t\t\t\t\t***************************************************\n\n";
+             PWH = PWH->next;
+             }
+            while(PWH!=NULL); 
+            }
+           } 
+            cout<<"Traversal done"<<endl;
+            outfile.close();
+
+       }   
